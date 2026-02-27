@@ -1,40 +1,63 @@
 import cv2
 import time
-from camera_feed import CameraFeed
-from ppe_detector import PPEDetector
-from pose_estimator import PoseEstimator
-from risk_scorer import RiskScorer
-from alert_engine import AlertEngine
+import os
+import sys
+
+from reporter import Reporter
+from camera_feed    import CameraFeed
+from qr_scanner     import QRScanner
+from ppe_detector   import PPEDetector
+from safety_status  import SafetyStatus
+from excel_reporter import ExcelReporter
 
 # ── Configuration ──────────────────────────────────────────────────
-CAMERA_SOURCE  = 0               # 0 = webcam, or "video.mp4" for testing
-MODEL_PATH     = "yolov8n.pt"    # Replace with PPE model later
-BACKEND_URL    = "http://localhost:5000"
+# For mobile camera, replace with your phone's IP:
+# CAMERA_SOURCE = "http://192.168.x.x:8080/video"
+CAMERA_SOURCE   = 0
+MODEL_PATH      = "yolov8n.pt"
+EMPLOYEES_FILE  = "../employee_data/employees.json"
+REPORT_PATH     = "../reports/employee_safety.xlsx"
 
-# ── Initialize all modules ─────────────────────────────────────────
-print("\n" + "="*50)
-print("  IndustriGuard AI — Starting Up")
-print("="*50 + "\n")
 
-camera  = CameraFeed(source=CAMERA_SOURCE)
+# How many seconds to show result before resetting for next worker
+RESULT_DISPLAY_SECONDS = 5
+
+# ── Startup ────────────────────────────────────────────────────────
+print("\n" + "="*55)
+print("   IndustriGuard AI — QR + PPE Safety Check System")
+print("="*55 + "\n")
+
+camera   = CameraFeed(source=CAMERA_SOURCE)
+scanner  = QRScanner(employees_file=EMPLOYEES_FILE)
 detector = PPEDetector(model_path=MODEL_PATH)
-pose    = PoseEstimator()
-scorer  = RiskScorer()
-alerts  = AlertEngine(backend_url=BACKEND_URL)
+safety   = SafetyStatus()
+reporter = ExcelReporter(report_path=REPORT_PATH)
+reporter_backend = Reporter(backend_url="http://localhost:5000")
 
-print("\n[System] All modules loaded. Starting surveillance...\n")
-print("Press Q to quit.\n")
+print("\n[System] All modules ready.\n")
+print("HOW TO USE:")
+print("  1. Worker holds QR ID card toward camera")
+print("  2. System scans QR → identifies employee")
+print("  3. System checks PPE (helmet, vest)")
+print("  4. Shows READY / NOT READY on screen")
+print("  5. Result saved to Excel report")
+print("\nPress Q to quit.\n")
+print("-" * 55)
 
-# ── Risk level display config ──────────────────────────────────────
-RISK_COLORS = {
-    "LOW":    (0, 255, 0),     # Green
-    "MEDIUM": (0, 165, 255),   # Orange
-    "HIGH":   (0, 0, 255)      # Red
-}
-
-# ── Main loop ──────────────────────────────────────────────────────
-frame_count = 0
-fps_time = time.time()
+# ── State Machine ──────────────────────────────────────────────────
+#
+#  SCANNING   → waiting for QR code
+#  CHECKING   → QR found, running PPE check
+#  DISPLAYING → showing result, countdown to reset
+#  RESET      → clear state, back to SCANNING
+#
+STATE             = "SCANNING"
+current_employee  = None
+current_status    = None
+result_timer      = None
+ppe_check_frames  = 0
+PPE_FRAMES_NEEDED = 10   # Analyze 10 frames to confirm PPE status
+ppe_results_pool  = []   # Collect results over multiple frames
 
 while True:
     frame = camera.get_frame()
@@ -42,81 +65,153 @@ while True:
         print("[Main] No frame received. Exiting.")
         break
 
-    frame_count += 1
-
-    # ── 1. PPE Detection ───────────────────────────────────────────
-    detections = detector.detect(frame)
-    compliance = detector.check_ppe_compliance(detections)
-    frame = detector.draw_boxes(frame, detections)
-
-    # ── 2. Pose Estimation ─────────────────────────────────────────
-    landmarks = pose.estimate(frame)
-    frame = pose.draw_skeleton(frame, landmarks)
-    posture_data = pose.get_posture_data(landmarks)
-    posture_deviation = pose.get_posture_deviation(posture_data)
-
-    inactivity = posture_data["inactivity_seconds"] if posture_data else 0
-
-    # ── 3. Risk Scoring ────────────────────────────────────────────
-    risk_level, score, breakdown = scorer.calculate(
-        compliance, posture_deviation, inactivity
-    )
-
-    # ── 4. Alert Engine ────────────────────────────────────────────
-    alerts.trigger(risk_level, score, breakdown, compliance, posture_data)
-
-    # ── 5. Draw HUD on frame ───────────────────────────────────────
-    color = RISK_COLORS[risk_level]
     h, w = frame.shape[:2]
 
-    # Risk level banner at top
-    cv2.rectangle(frame, (0, 0), (w, 60), color, -1)
+    # ── Top instruction banner ─────────────────────────────────────
+    cv2.rectangle(frame, (0, 0), (w, 50), (20, 60, 120), -1)
     cv2.putText(
         frame,
-        f"  RISK: {risk_level}   |   Score: {score}/100",
-        (10, 40),
+        "IndustriGuard AI — Safety Check Station",
+        (15, 32),
         cv2.FONT_HERSHEY_SIMPLEX,
-        1.0, (255, 255, 255), 2
+        0.75, (255, 255, 255), 2
     )
 
-    # PPE status
-    ppe_text = "PPE: "
-    ppe_text += "✓ Helmet  " if compliance["has_helmet"] else "✗ No Helmet  "
-    ppe_text += "✓ Vest" if compliance["has_vest"] else "✗ No Vest"
+    # ══════════════════════════════════════════════════════════════
+    # STATE: SCANNING — Wait for QR code
+    # ══════════════════════════════════════════════════════════════
+    if STATE == "SCANNING":
 
-    cv2.putText(
-        frame, ppe_text,
-        (10, 90),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.65, color, 2
-    )
-
-    # Posture info
-    if posture_data:
+        # Show instruction
         cv2.putText(
             frame,
-            f"Posture Deviation: {posture_deviation}  |  "
-            f"Inactivity: {inactivity:.1f}s",
-            (10, 120),
+            "Please show your QR ID Card to the camera",
+            (w // 2 - 250, h // 2),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8, (255, 255, 0), 2
+        )
+
+        # Scanning border animation (yellow box in center)
+        box_x1, box_y1 = w // 2 - 150, h // 2 - 150
+        box_x2, box_y2 = w // 2 + 150, h // 2 + 100
+        cv2.rectangle(frame, (box_x1, box_y1), (box_x2, box_y2),
+                      (0, 255, 255), 2)
+        cv2.putText(
+            frame, "[ SCAN AREA ]",
+            (box_x1 + 30, box_y1 - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6, (0, 255, 255), 1
+        )
+
+        # Try to scan QR
+        employee = scanner.scan_frame(frame)
+        frame    = scanner.draw_qr_overlay(frame, employee)
+
+        if employee:
+            current_employee = employee
+            ppe_check_frames = 0
+            ppe_results_pool = []
+            STATE = "CHECKING"
+            print(f"\n[Main] QR Scanned → {employee['id']} : {employee['name']}")
+            print("[Main] Starting PPE check...")
+
+    # ══════════════════════════════════════════════════════════════
+    # STATE: CHECKING — QR found, now check PPE
+    # ══════════════════════════════════════════════════════════════
+    elif STATE == "CHECKING":
+
+        # Show checking banner
+        cv2.rectangle(frame, (0, 55), (w, 95), (20, 100, 20), -1)
+        cv2.putText(
+            frame,
+            f"Checking PPE for: {current_employee['name']}  "
+            f"({ppe_check_frames}/{PPE_FRAMES_NEEDED})",
+            (15, 80),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65, (255, 255, 255), 2
+        )
+
+        # Run PPE detection on this frame
+        detections = detector.detect(frame)
+        compliance = detector.check_ppe_compliance(detections)
+        frame      = detector.draw_boxes(frame, detections)
+
+        # Collect result
+        ppe_results_pool.append(compliance)
+        ppe_check_frames += 1
+
+        # After enough frames, make final decision
+        if ppe_check_frames >= PPE_FRAMES_NEEDED:
+
+            # Majority vote across collected frames
+            helmet_votes = sum(1 for r in ppe_results_pool if r["has_helmet"])
+            vest_votes   = sum(1 for r in ppe_results_pool if r["has_vest"])
+
+            final_compliance = {
+                "has_helmet": helmet_votes >= PPE_FRAMES_NEEDED // 2,
+                "has_vest":   vest_votes   >= PPE_FRAMES_NEEDED // 2,
+                "missing":    []
+            }
+            if not final_compliance["has_helmet"]:
+                final_compliance["missing"].append("Helmet")
+            if not final_compliance["has_vest"]:
+                final_compliance["missing"].append("Safety Vest")
+
+            # Evaluate final status
+            current_status = safety.evaluate(final_compliance)
+
+            # Save to Excel
+            reporter.update_employee(current_employee, current_status)
+            # Send to backend
+            reporter_backend.send_check_result(current_employee, current_status)
+
+            result_timer = time.time()
+            STATE = "DISPLAYING"
+            print(f"[Main] Result → {current_status['status']}")
+
+    # ══════════════════════════════════════════════════════════════
+    # STATE: DISPLAYING — Show result, then reset
+    # ══════════════════════════════════════════════════════════════
+    elif STATE == "DISPLAYING":
+
+        # Draw status overlay
+        frame = safety.draw_status(frame, current_status, current_employee)
+
+        # Countdown timer
+        elapsed   = time.time() - result_timer
+        remaining = int(RESULT_DISPLAY_SECONDS - elapsed)
+
+        cv2.putText(
+            frame,
+            f"Next check in {remaining}s...",
+            (w - 220, 35),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6, (200, 200, 200), 1
         )
 
-    # FPS counter
-    fps = frame_count / (time.time() - fps_time)
-    cv2.putText(
-        frame, f"FPS: {fps:.1f}",
-        (w - 120, h - 10),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.6, (150, 150, 150), 1
-    )
+        # Excel saved confirmation
+        cv2.putText(
+            frame,
+            "✓ Saved to Excel Report",
+            (w - 250, h - 110),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6, (0, 255, 100), 2
+        )
 
-    # ── 6. Display ─────────────────────────────────────────────────
-    cv2.imshow("IndustriGuard AI — Surveillance", frame)
+        # Auto reset after display time
+        if elapsed >= RESULT_DISPLAY_SECONDS:
+            STATE = "SCANNING"
+            scanner.reset()
+            current_employee = None
+            current_status   = None
+            print("\n[Main] Ready for next worker...\n" + "-"*55)
+
+    # ── Show frame ─────────────────────────────────────────────────
+    cv2.imshow("IndustriGuard AI — Safety Check", frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
-        print("\n[Main] Q pressed. Shutting down...")
+        print("\n[Main] Shutting down...")
         break
 
 camera.release()
-print("[Main] IndustriGuard AI stopped.\n")
+print("[Main] System stopped.\n")

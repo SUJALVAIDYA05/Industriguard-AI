@@ -1,6 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
 
-# Single db instance shared across the entire app
 db = SQLAlchemy()
 
 def init_db(app):

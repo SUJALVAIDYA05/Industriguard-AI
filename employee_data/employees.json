@@ -1,0 +1,28 @@
+{
+    "employees": [
+      {
+        "id": "EMP-001",
+        "name": "Sambram Sangalad",
+        "department": "Manufacturing",
+        "role": "Machine Operator"
+      },
+      {
+        "id": "EMP-002",
+        "name": "Shashidhar Pawadashetti",
+        "department": "Construction",
+        "role": "Site Engineer"
+      },
+      {
+        "id": "EMP-003",
+        "name": "Sujal Ashok Vaidya",
+        "department": "Manufacturing",
+        "role": "Quality Inspector"
+      },
+      {
+        "id": "EMP-004",
+        "name": "Vaibhav Hujaratti",
+        "department": "Electrical",
+        "role": "Electrician"
+      }
+    ]
+  }
