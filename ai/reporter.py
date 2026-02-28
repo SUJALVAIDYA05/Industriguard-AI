@@ -6,7 +6,7 @@ class Reporter:
         self.backend_url = backend_url
         print(f"[Reporter] Initialized → backend: {backend_url}")
 
-    def send_check_result(self, employee, status_data):
+    def send_check_result(self, employee, status_data, camera_id="CAM-01"):
         """
         Sends completed check result to Flask backend.
         Called once per employee check after PPE analysis is done.
@@ -20,7 +20,7 @@ class Reporter:
             "has_vest":      status_data["has_vest"],
             "missing_ppe":   status_data["missing"],
             "status":        status_data["status"],
-            "camera_id":     "CAM-01",
+            "camera_id":     camera_id or "CAM-01",
             "timestamp":     time.strftime("%Y-%m-%d %H:%M:%S")
         }
 

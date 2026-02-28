@@ -3,12 +3,23 @@ import time
 import os
 import sys
 
-from reporter import Reporter
+from config import (
+    CAMERA_SOURCE,
+    BACKEND_URL,
+    MODEL_PATH,
+    EMPLOYEES_FILE,
+    REPORT_PATH,
+    RESULT_DISPLAY_SECONDS,
+    PPE_FRAMES_NEEDED,
+    CAMERA_ID
+)
+
 from camera_feed    import CameraFeed
 from qr_scanner     import QRScanner
 from ppe_detector   import PPEDetector
 from safety_status  import SafetyStatus
 from excel_reporter import ExcelReporter
+from reporter       import Reporter
 
 # ── Configuration ──────────────────────────────────────────────────
 # For mobile camera, replace with your phone's IP:
@@ -27,12 +38,18 @@ print("\n" + "="*55)
 print("   IndustriGuard AI — QR + PPE Safety Check System")
 print("="*55 + "\n")
 
-camera   = CameraFeed(source=CAMERA_SOURCE)
+camera   = CameraFeed()                              # reads from config
 scanner  = QRScanner(employees_file=EMPLOYEES_FILE)
 detector = PPEDetector(model_path=MODEL_PATH)
 safety   = SafetyStatus()
 reporter = ExcelReporter(report_path=REPORT_PATH)
-reporter_backend = Reporter(backend_url="http://localhost:5000")
+reporter_backend = Reporter(backend_url=BACKEND_URL)
+
+cam_info = camera.get_info()
+print(f"\n[Camera] Type   : {cam_info['type']}")
+print(f"[Camera] Source : {cam_info['source']}")
+print(f"[Camera] Size   : {cam_info['width']}x{cam_info['height']}")
+print(f"[Camera] FPS    : {cam_info['fps']}")
 
 print("\n[System] All modules ready.\n")
 print("HOW TO USE:")
