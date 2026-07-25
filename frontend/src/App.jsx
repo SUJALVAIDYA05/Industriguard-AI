@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
-import Dashboard from "./pages/Dashboard";
-import LiveAlert from "./components/LiveAlert";
+import Dashboard        from "./pages/Dashboard";
+import LiveAlert        from "./components/LiveAlert";
+import ImageUploadPanel from "./components/ImageUploadPanel";
 
 const socket = io("http://localhost:5000", {
   reconnection:      true,
@@ -11,6 +12,7 @@ const socket = io("http://localhost:5000", {
 export default function App() {
   const [connected,    setConnected]    = useState(false);
   const [latestUpdate, setLatestUpdate] = useState(null);
+  const [activeMode,   setActiveMode]   = useState("live"); // "live" | "upload"
 
   useEffect(() => {
     socket.on("connect", () => {
@@ -110,11 +112,52 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {/* ── Mode Switcher Tabs ───────────────────────────────── */}
+        <div
+          style={{
+            borderTop:   "1px solid var(--border)",
+            padding:     "0 24px",
+            display:     "flex",
+            gap:         "4px",
+          }}
+        >
+          {[
+            { id: "live",   label: "🎥  Live Camera Detection" },
+            { id: "upload", label: "📷  Image Upload Detection" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              id={`tab-${tab.id}`}
+              onClick={() => setActiveMode(tab.id)}
+              style={{
+                padding:      "10px 20px",
+                background:   "transparent",
+                border:       "none",
+                borderBottom: activeMode === tab.id ? "2px solid var(--amber)" : "2px solid transparent",
+                color:        activeMode === tab.id ? "var(--amber)" : "var(--text-secondary)",
+                fontFamily:   "var(--font-mono)",
+                fontSize:     "12px",
+                fontWeight:   activeMode === tab.id ? 700 : 400,
+                letterSpacing: "0.06em",
+                cursor:       "pointer",
+                transition:   "all 0.2s ease",
+                marginBottom: "-1px",
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </header>
 
-      {/* ── Main Dashboard ──────────────────────────────────── */}
+      {/* ── Main Content (mode-dependent) ─────────────────── */}
       <main>
-        <Dashboard latestUpdate={latestUpdate} />
+        {activeMode === "live" ? (
+          <Dashboard latestUpdate={latestUpdate} />
+        ) : (
+          <ImageUploadPanel />
+        )}
       </main>
 
       {/* ── Live Alert Popup ────────────────────────────────── */}
