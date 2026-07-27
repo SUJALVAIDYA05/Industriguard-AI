@@ -34,6 +34,16 @@ print("="*55 + "\n")
 
 camera   = CameraFeed()                              # reads from config
 scanner  = QRScanner(employees_file=EMPLOYEES_FILE)
+
+# Check model file exists before initializing YOLO (prevents network download attempt)
+if not os.path.exists(MODEL_PATH):
+    print(f"[ERROR] Model file not found: {MODEL_PATH}")
+    print("[ERROR] The YOLO model must be downloaded first.")
+    print(f"[ERROR] Run:  python download_models.py {MODEL_PATH}")
+    print("[ERROR]   (requires internet connectivity)")
+    camera.release()
+    sys.exit(1)
+
 detector = PPEDetector(model_path=MODEL_PATH)
 safety   = SafetyStatus()
 reporter = ExcelReporter(report_path=REPORT_PATH)
@@ -264,7 +274,7 @@ while True:
                     f"{emp['name']} ({emp['id']})",
                     f"{emp.get('department','')} | {emp.get('role','')}",
                     f"Helmet: {'Y' if has_helmet else 'N'}  Vest: {'Y' if has_vest else 'N'}  Gloves: {'Y' if has_gloves else 'N'}",
-                    f"Glasses: {'Y' if has_goggles else 'N'}  Boots: {'Y' if has_boots else 'N'}",
+                    f"Goggles: {'Y' if has_goggles else 'N'}  Boots: {'Y' if has_boots else 'N'}",
                     f"Safety: {safety_pct}%  Status: {status}",
                 ]
 
@@ -306,7 +316,7 @@ while True:
                         "missing": ([] if has_helmet else ["Helmet"]) +
                                    ([] if has_vest else ["Safety Vest"]) +
                                    ([] if has_gloves else ["Gloves"]) +
-                                   ([] if has_goggles else ["Glasses"]) +
+                                   ([] if has_goggles else ["Goggles"]) +
                                    ([] if has_boots else ["Boots"])
                     }
                     status_data = safety.evaluate(compliance)
@@ -408,11 +418,12 @@ while True:
             boots_votes   = sum(1 for r in ppe_results_pool if r.get("has_boots"))
 
             half = PPE_FRAMES_NEEDED // 2
+            goggles_threshold = max(3, PPE_FRAMES_NEEDED // 3)
             final_compliance = {
                 "has_helmet":  helmet_votes  >= half,
                 "has_vest":    vest_votes    >= half,
                 "has_gloves":  gloves_votes  >= half,
-                "has_goggles": goggles_votes >= half,
+                "has_goggles": goggles_votes >= goggles_threshold,
                 "has_boots":   boots_votes   >= half,
                 "missing":     []
             }
@@ -423,7 +434,7 @@ while True:
             if not final_compliance["has_gloves"]:
                 final_compliance["missing"].append("Gloves")
             if not final_compliance["has_goggles"]:
-                final_compliance["missing"].append("Glasses")
+                final_compliance["missing"].append("Goggles")
             if not final_compliance["has_boots"]:
                 final_compliance["missing"].append("Boots")
 

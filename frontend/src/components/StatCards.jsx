@@ -105,7 +105,7 @@ export default function StatCards({ stats }) {
       <StatCard
         label="Not Ready"
         value={current?.not_ready ?? 0}
-        sub={`${ppe_violations?.no_helmet ?? 0} helmet · ${ppe_violations?.no_vest ?? 0} vest · ${ppe_violations?.no_gloves ?? 0} gloves · ${ppe_violations?.no_goggles ?? 0} glasses · ${ppe_violations?.no_boots ?? 0} boots`}
+        sub={`${ppe_violations?.no_helmet ?? 0} helmet · ${ppe_violations?.no_vest ?? 0} vest · ${ppe_violations?.no_gloves ?? 0} gloves · ${ppe_violations?.no_goggles ?? 0} goggles · ${ppe_violations?.no_boots ?? 0} boots`}
         accent="red"
         icon="🚨"
         animatePulse={current?.not_ready > 0}

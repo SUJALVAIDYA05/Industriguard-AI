@@ -5,12 +5,12 @@ class PPEDetector:
     # Minimum confidence to keep a detection (filters noise)
     MIN_CONFIDENCE = 0.30
 
-    def __init__(self, model_path="yolo11n.pt"):
+    def __init__(self, model_path="ppe_model.pt"):
         self.model = YOLO(model_path)
         print(f"[PPEDetector] Model loaded → {model_path}")
 
-        # Class names matching the trained PPE model (ppe_model_v8.pt)
-        # Uses exact (case-insensitive) matching to avoid NO- class conflicts
+        self.CLASS_CONFIDENCE = {"goggles": 0.15}
+
         self.HELMET_CLASSES    = ["helmet"]
         self.VEST_CLASSES      = ["vest"]
         self.GLOVES_CLASSES    = ["gloves"]
@@ -28,9 +28,10 @@ class PPEDetector:
             for box in result.boxes:
                 class_id    = int(box.cls[0])
                 confidence  = float(box.conf[0])
-                if confidence < self.MIN_CONFIDENCE:
-                    continue
                 class_name  = self.model.names[class_id]
+                min_conf    = self.CLASS_CONFIDENCE.get(class_name.lower(), self.MIN_CONFIDENCE)
+                if confidence < min_conf:
+                    continue
                 bbox        = box.xyxy[0].tolist()
 
                 detections.append({
@@ -63,13 +64,13 @@ class PPEDetector:
             for box in boxes:
                 class_id = int(box.cls[0])
                 confidence = float(box.conf[0])
-                if confidence < self.MIN_CONFIDENCE:
-                    continue
                 class_name = self.model.names[class_id]
+                min_conf = self.CLASS_CONFIDENCE.get(class_name.lower(), self.MIN_CONFIDENCE)
+                if confidence < min_conf:
+                    continue
                 bbox = box.xyxy[0].tolist()
 
                 track_id = None
-                # Ultralytics typically exposes tracking IDs via box.id
                 try:
                     if getattr(box, "id", None) is not None:
                         track_id = int(box.id[0])
@@ -107,9 +108,10 @@ class PPEDetector:
             for box in boxes:
                 class_id = int(box.cls[0])
                 confidence = float(box.conf[0])
-                if confidence < self.MIN_CONFIDENCE:
-                    continue
                 class_name = self.model.names[class_id]
+                min_conf = self.CLASS_CONFIDENCE.get(class_name.lower(), self.MIN_CONFIDENCE)
+                if confidence < min_conf:
+                    continue
                 bbox = box.xyxy[0].tolist()
 
                 track_id = None
@@ -134,8 +136,7 @@ class PPEDetector:
         return any(name == c for c in class_names)
 
     def split_detections(self, detections):
-        """Splits detections into persons / helmets / vests / gloves / goggles / boots / other."""
-        persons, helmets, vests, gloves, goggles, boots, other = [], [], [], [], [], [], []
+        persons, helmets, vests, gloves, goggles, boots, negatives, other = [], [], [], [], [], [], [], []
         for d in detections or []:
             if self._is_class(d, self.PERSON_CLASSES):
                 persons.append(d)
@@ -149,9 +150,11 @@ class PPEDetector:
                 goggles.append(d)
             elif self._is_class(d, self.BOOTS_CLASSES):
                 boots.append(d)
+            elif self._is_class(d, self.VIOLATION_CLASSES):
+                negatives.append(d)
             else:
                 other.append(d)
-        return persons, helmets, vests, gloves, goggles, boots, other
+        return persons, helmets, vests, gloves, goggles, boots, negatives, other
 
     def _center(self, bbox):
         x1, y1, x2, y2 = bbox
@@ -163,14 +166,14 @@ class PPEDetector:
         return x1 <= x <= x2 and y1 <= y <= y2
 
     def _expand_bbox_up(self, bbox, factor=0.35):
-        """
-        Expand a bounding box UPWARD by `factor` of its height.
-        Helmets sit on top of the head, so their center is often
-        above the person bbox — this captures them.
-        """
         x1, y1, x2, y2 = bbox
         bh = y2 - y1
         return [x1, int(y1 - bh * factor), x2, y2]
+
+    def _expand_bbox_upper_portion(self, bbox, factor=0.35):
+        x1, y1, x2, y2 = bbox
+        bh = y2 - y1
+        return [x1, y1, x2, int(y1 + bh * factor)]
 
     def _expand_bbox_down(self, bbox, factor=0.20):
         """
@@ -182,27 +185,24 @@ class PPEDetector:
         return [x1, y1, x2, int(y2 + bh * factor)]
 
     def per_person_compliance(self, detections):
-        """
-        Computes PPE compliance per detected person by associating PPE boxes
-        whose center falls inside (or near) the person bbox.
-        The person bbox is expanded upward for helmets/goggles and downward for boots.
-        Returns a list:
-          [{ person_det, has_helmet, has_vest, has_gloves, has_goggles, has_boots, safety_percentage }, ...]
-        """
-        persons, helmets, vests, gloves, goggles, boots, _ = self.split_detections(detections)
+        persons, helmets, vests, gloves, goggles, boots, negatives, _ = self.split_detections(detections)
         out = []
 
         for p in persons:
             pb = p["bbox"]
-            # Expand upward so helmets/goggles above the head are captured
-            pb_up   = self._expand_bbox_up(pb, factor=0.35)
-            # Expand downward so boots at the feet are captured
-            pb_down = self._expand_bbox_down(pb, factor=0.20)
+            pb_up     = self._expand_bbox_up(pb, factor=0.35)
+            pb_upper  = self._expand_bbox_upper_portion(pb, factor=0.35)
+            pb_down   = self._expand_bbox_down(pb, factor=0.20)
 
             has_helmet  = any(self._point_in_bbox(self._center(h["bbox"]), pb_up) for h in helmets)
             has_vest    = any(self._point_in_bbox(self._center(v["bbox"]), pb) for v in vests)
             has_gloves  = any(self._point_in_bbox(self._center(g["bbox"]), pb) for g in gloves)
-            has_goggles = any(self._point_in_bbox(self._center(g["bbox"]), pb_up) for g in goggles)
+            has_goggles = any(self._point_in_bbox(self._center(g["bbox"]), pb_upper) for g in goggles)
+            if not has_goggles:
+                has_goggles = any(self._point_in_bbox(self._center(g["bbox"]), pb) for g in goggles)
+            has_no_goggle_near = any(self._point_in_bbox(self._center(n["bbox"]), pb_upper) for n in negatives if self._is_class(n, ["no_goggle"]))
+            if has_no_goggle_near:
+                has_goggles = False
             has_boots   = any(self._point_in_bbox(self._center(b["bbox"]), pb_down) for b in boots)
 
             total_items = 5
@@ -242,7 +242,7 @@ class PPEDetector:
         if not has_gloves:
             missing.append("Gloves")
         if not has_goggles:
-            missing.append("Glasses")
+            missing.append("Goggles")
         if not has_boots:
             missing.append("Boots")
 
