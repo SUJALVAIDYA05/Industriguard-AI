@@ -79,7 +79,7 @@ export default function LiveAlert({ update }) {
             {current.has_gloves ? "✓" : "✗"} Gloves
           </span>
           <span style={{ color: current.has_goggles ? "var(--green)" : "var(--red)", fontSize: "13px" }}>
-            {current.has_goggles ? "✓" : "✗"} Glasses
+            {current.has_goggles ? "✓" : "✗"} Goggles
           </span>
           <span style={{ color: current.has_boots ? "var(--green)" : "var(--red)", fontSize: "13px" }}>
             {current.has_boots ? "✓" : "✗"} Boots

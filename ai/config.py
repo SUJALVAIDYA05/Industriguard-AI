@@ -41,7 +41,7 @@ VIDEO_FILE_PATH = "test_video.mp4"
 BACKEND_URL = "http://localhost:5000"
 
 # ── AI Model Settings ────────────────────────────────────
-MODEL_PATH = "ppe_model_v8.pt"  # Trained PPE model (25 classes: PPE, vehicles, equipment, person)
+MODEL_PATH = "ppe_model.pt"  # Trained PPE model (25 classes: PPE, vehicles, equipment, person)
 
 # ── Tracking Settings ───────────────────────────────────────
 # Enables Ultralytics ByteTrack for stable person IDs across frames.

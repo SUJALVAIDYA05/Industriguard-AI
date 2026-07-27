@@ -7,7 +7,7 @@ const PPE_ITEMS = [
   { key: "has_helmet",  label: "Helmet"  },
   { key: "has_vest",    label: "Safety Vest" },
   { key: "has_gloves",  label: "Gloves"  },
-  { key: "has_goggles", label: "Glasses" },
+  { key: "has_goggles", label: "Goggles" },
   { key: "has_boots",   label: "Boots"   },
 ];
 

@@ -17,7 +17,7 @@ if _AI_DIR not in sys.path:
 try:
     from ppe_detector import PPEDetector
     from safety_status import SafetyStatus
-    _MODEL_PATH = os.path.join(os.path.abspath(_AI_DIR), "ppe_model_v8.pt")
+    _MODEL_PATH = os.path.join(os.path.abspath(_AI_DIR), "ppe_model.pt")
     _detector   = PPEDetector(model_path=_MODEL_PATH)
     _safety     = SafetyStatus()
     _DETECT_READY = True

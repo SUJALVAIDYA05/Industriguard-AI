@@ -56,7 +56,7 @@ class SafetyStatus:
             ("Helmet",      status_data.get("has_helmet", False)),
             ("Safety Vest", status_data.get("has_vest",   False)),
             ("Gloves",      status_data.get("has_gloves", False)),
-            ("Glasses",     status_data.get("has_goggles", False)),
+            ("Goggles",     status_data.get("has_goggles", False)),
             ("Boots",       status_data.get("has_boots",  False)),
         ]
 

@@ -29,14 +29,14 @@ export function buildDashboardWorkbook({ stats, employees, trend, departments, c
       helmet: toYesNo(e.has_helmet),
       vest: toYesNo(e.has_vest),
       gloves: toYesNo(e.has_gloves),
-      glasses: toYesNo(e.has_goggles),
+      goggles: toYesNo(e.has_goggles),
       boots: toYesNo(e.has_boots),
       safety_percentage: calcSafetyPercentage(e.has_helmet, e.has_vest, e.has_gloves, e.has_goggles, e.has_boots),
       status: e.status ?? "",
     }));
 
   const workersWs = XLSX.utils.json_to_sheet(workers, {
-    header: ["name", "helmet", "vest", "gloves", "glasses", "boots", "safety_percentage", "status"],
+    header: ["name", "helmet", "vest", "gloves", "goggles", "boots", "safety_percentage", "status"],
   });
   XLSX.utils.book_append_sheet(wb, workersWs, safeSheetName("Workers"));
 

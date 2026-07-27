@@ -117,7 +117,7 @@ export default function EmployeeTable({ employees, latestUpdate }) {
                 <th>Helmet</th>
                 <th>Safety Vest</th>
                 <th>Gloves</th>
-                <th>Glasses</th>
+                <th>Goggles</th>
                 <th>Boots</th>
                 <th>Safety %</th>
                 <th>Status</th>
@@ -152,7 +152,7 @@ export default function EmployeeTable({ employees, latestUpdate }) {
                   <td><PPEIcon present={emp.has_helmet}  label="Helmet"  /></td>
                   <td><PPEIcon present={emp.has_vest}    label="Vest"    /></td>
                   <td><PPEIcon present={emp.has_gloves}  label="Gloves"  /></td>
-                  <td><PPEIcon present={emp.has_goggles} label="Glasses" /></td>
+                  <td><PPEIcon present={emp.has_goggles} label="Goggles" /></td>
                   <td><PPEIcon present={emp.has_boots}   label="Boots"   /></td>
                   <td
                     className="text-xs font-semibold"
